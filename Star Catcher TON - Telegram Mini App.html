@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Star Catcher TON - Mini App</title>
+    <!-- SDK Oficial de Telegram WebApp -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <!-- Tailwind CSS para diseño responsivo y moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Fuentes Google: Outfit y JetBrains Mono -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@600;800&family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --tg-bg: #0b0e14;
+            --tg-card: #151a24;
+            --tg-gold: #fbbf24;
+            --tg-ton: #0098ea;
+            --tg-pink: #f43f5e;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--tg-bg);
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            overflow-x: hidden;
+            min-height: 100vh;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 152, 234, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(251, 191, 36, 0.12) 0%, transparent 40%);
+        }
+
+        .font-mono-num {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Efectos de brillo neón y dorado */
+        .glow-gold {
+            box-shadow: 0 0 20px rgba(251, 191, 36, 0.35);
+        }
+
+        .glow-ton {
+            box-shadow: 0 0 20px rgba(0, 152, 234, 0.35);
+        }
+
+        .text-gradient-gold {
+            background: linear-gradient(135deg, #fde68a 0%, #fbbf24 50%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .text-gradient-ton {
+            background: linear-gradient(135deg, #38bdf8 0%, #0098ea 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Botón principal con animación de pulso */
+        .btn-play {
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #0b0e14;
+            transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+            box-shadow: 0 6px 0 #b45309, 0 12px 24px rgba(245, 158, 11, 0.4);
+        }
+
+        .btn-play:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #b45309, 0 4px 12px rgba(245, 158, 11, 0.4);
+        }
+
+        /* Canvas del juego */
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        /* Scrollbar estilizado para el Top Diario */
+        ::-webkit-scrollbar {
+            width: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.03);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(251, 191, 36, 0.3);
+            border-radius: 10px;
+        }
+
+        @keyframes floatSlow {
+            0%, 100% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-6px) rotate(4deg); }
+        }
+
+        .animate-float {
+            animation: floatSlow 3s ease-in-out infinite;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0); }
+            20% { transform: translate(-8px, 6px); }
+            40% { transform: translate(8px, -6px); }
+            60% { transform: translate(-6px, -4px); }
+            80% { transform: translate(6px, 4px); }
+        }
+
+        .shake-screen {
+            animation: shake 0.35s cubic-bezier(.36,.07,.19,.97) both;
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between min-h-screen">
+
+    <!-- CONTENEDOR PRINCIPAL ESTILO MINI APP -->
+    <div id="appContainer" class="w-full max-w-md min-h-screen flex flex-col justify-between p-4 relative">
+
+        <!-- ==========================================
+             PANTALLA 1: INICIO Y TOP DIARIO (LOBBY)
+             ========================================== -->
+        <div id="lobbyScreen" class="flex flex-col gap-4 w-full flex-1">
+            
+            <!-- Header Usuario & Control de Sonido -->
+            <header class="flex items-center justify-between bg-[#151a24]/90 backdrop-blur-md border border-white/10 rounded-2xl p-3">
+                <div class="flex items-center gap-2.5 overflow-hidden">
+                    <div id="userAvatar" class="w-10 h-10 rounded-full bg-gradient-to-tr from-[#0098ea] to-[#fbbf24] flex items-center justify-center font-black text-slate-950 text-lg shrink-0 shadow-md">
+                        ⭐
+                    </div>
+                    <div class="flex flex-col overflow-hidden">
+                        <div class="flex items-center gap-1.5">
+                            <span id="displayUserName" class="font-bold text-sm truncate text-white">Jugador</span>
+                            <button onclick="openEditNameModal()" title="Cambiar alias" class="text-xs text-amber-400 hover:text-amber-300 bg-amber-400/10 px-1.5 py-0.5 rounded-md">
+                                ✏️
+                            </button>
+                        </div>
+                        <span id="tgStatusBadge" class="text-[11px] text-sky-400 font-medium flex items-center gap-1">
+                            <span class="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block"></span> Modo Web / Demo
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Botón Audio -->
+                <button id="soundToggleBtn" onclick="toggleSound()" class="w-10 h-10 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 flex items-center justify-center text-lg transition">
+                    🔊
+                </button>
+            </header>
+
+            <!-- Hero Card: Título, Récord y Botón Jugar -->
+            <section class="bg-gradient-to-b from-[#1a2232] to-[#121722] border border-amber-400/25 rounded-3xl p-5 text-center relative overflow-hidden shadow-2xl">
+                <!-- Destello decorativo -->
+                <div class="absolute -top-12 -right-12 w-32 h-32 bg-amber-400/15 rounded-full blur-2xl pointer-events-none"></div>
+                <div class="absolute -bottom-12 -left-12 w-32 h-32 bg-sky-500/15 rounded-full blur-2xl pointer-events-none"></div>
+
+                <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/10 border border-amber-400/30 text-amber-300 text-xs font-bold mb-2">
+                    <span>⚡</span> TORNEO DIARIO EN VIVO
+                </div>
+
+                <h1 class="text-3xl font-black tracking-tight mb-1">
+                    <span class="text-gradient-gold">STAR CATCHER</span> <span class="text-gradient-ton">TON</span>
+                </h1>
+                <p class="text-xs text-slate-400 mb-4">Atrapa estrellas y diamantes en 30s. ¡Evita las bombas!</p>
+
+                <!-- Estadísticas Rápidas: Récord y Reinicio Diario -->
+                <div class="grid grid-cols-2 gap-2.5 mb-5">
+                    <div class="bg-[#0b0e14]/70 border border-white/10 rounded-2xl p-2.5">
+                        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Tu Récord Hoy</div>
+                        <div id="personalBestDisplay" class="font-mono-num text-xl font-extrabold text-amber-400 mt-0.5">0</div>
+                    </div>
+                    <div class="bg-[#0b0e14]/70 border border-white/10 rounded-2xl p-2.5">
+                        <div class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">Reinicio Top</div>
+                        <div id="dailyResetTimer" class="font-mono-num text-xl font-extrabold text-sky-400 mt-0.5">00:00:00</div>
+                    </div>
+                </div>
+
+                <!-- Botón Principal Jugar -->
+                <button onclick="startGame()" class="btn-play w-full py-4 rounded-2xl font-black text-lg tracking-wide uppercase flex items-center justify-center gap-2 cursor-pointer">
+                    <span>🎮</span> ¡JUGAR AHORA (30s)!
+                </button>
+
+                <!-- Leyenda rápida de puntos -->
+                <div class="flex justify-center items-center gap-3 mt-4 text-[11px] text-slate-300 font-medium">
+                    <span class="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg">🪙 +10</span>
+                    <span class="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg">⭐ +25</span>
+                    <span class="flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg">💎 +50</span>
+                    <span class="flex items-center gap-1 bg-rose-500/15 text-rose-300 px-2 py-1 rounded-lg">💣 -50</span>
+                </div>
+            </section>
+
+            <!-- SECCIÓN: TOP DIARIO Y RECOMPENSAS -->
+            <section class="bg-[#151a24]/95 border border-white/10 rounded-3xl p-4 flex-1 flex flex-col shadow-xl">
+                <div class="flex items-center justify-between mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xl">🏆</span>
+                        <div>
+                            <h2 class="font-extrabold text-base leading-tight text-white">Top Diario & Premios</h2>
+                            <p class="text-[11px] text-slate-400">Los 3 mejores ganan recompensas al reiniciar</p>
+                        </div>
+                    </div>
+                    <button onclick="openRewardsModal()" class="text-xs font-bold bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/30 px-2.5 py-1.5 rounded-xl transition">
+                        🎁 Premios
+                    </button>
+                </div>
+
+                <!-- Banner de estado de recompensa del usuario -->
+                <div id="userRewardBanner" class="mb-3 bg-gradient-to-r from-sky-500/15 to-amber-500/15 border border-sky-400/30 rounded-2xl p-2.5 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <span id="userRankBadge" class="font-mono-num text-xs font-extrabold bg-slate-800 text-white px-2 py-1 rounded-lg">#--</span>
+                        <div class="text-xs">
+                            <div class="text-slate-300 font-semibold">Tu posición actual</div>
+                            <div id="userProjectedReward" class="text-amber-300 font-bold text-[11px]">¡Juega para entrar al Top 3!</div>
+                        </div>
+                    </div>
+                    <button id="claimRewardBtn" onclick="claimDailyReward()" class="hidden text-xs font-black bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-xl shadow-lg transition">
+                        Reclamar
+                    </button>
+                </div>
+
+                <!-- Lista del Leaderboard -->
+                <div id="leaderboardList" class="flex flex-col gap-2 overflow-y-auto max-h-[260px] pr-1">
+                    <!-- Se llena dinámicamente con JS -->
+                </div>
+            </section>
+        </div>
+
+        <!-- ==========================================
+             PANTALLA 2: ÁREA DE JUEGO (CANVAS 30s)
+             ========================================== -->
+        <div id="gameScreen" class="hidden fixed inset-0 z-30 bg-[#0b0e14] flex flex-col">
+            <!-- HUD Superior -->
+            <div class="w-full max-w-md mx-auto p-3 flex items-center justify-between z-10">
+                <!-- Puntuación -->
+                <div class="bg-[#151a24]/90 backdrop-blur-md border border-amber-400/30 rounded-2xl px-3.5 py-2 flex items-center gap-2">
+                    <span class="text-lg">⭐</span>
+                    <div>
+                        <div class="text-[10px] uppercase text-slate-400 font-bold leading-none">Puntos</div>
+                        <div id="hudScore" class="font-mono-num text-xl font-black text-amber-400 leading-tight">0</div>
+                    </div>
+                </div>
+
+                <!-- Combo Indicator -->
+                <div id="comboBadge" class="opacity-0 transition-opacity duration-200 bg-gradient-to-r from-fuchsia-600 to-amber-500 px-3 py-1 rounded-full font-black text-xs tracking-wider shadow-lg">
+                    COMBO x2
+                </div>
+
+                <!-- Temporizador 30s -->
+                <div class="bg-[#151a24]/90 backdrop-blur-md border border-sky-400/30 rounded-2xl px-3.5 py-2 flex items-center gap-2">
+                    <span class="text-lg">⏱️</span>
+                    <div>
+                        <div class="text-[10px] uppercase text-slate-400 font-bold leading-none">Tiempo</div>
+                        <div id="hudTimer" class="font-mono-num text-xl font-black text-sky-400 leading-tight">30s</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Contenedor del Canvas Responsivo -->
+            <div id="canvasWrapper" class="relative flex-1 w-full max-w-md mx-auto overflow-hidden">
+                <canvas id="gameCanvas"></canvas>
+                <!-- Instrucción táctil inicial -->
+                <div id="touchHint" class="pointer-events-none absolute bottom-24 inset-x-0 text-center transition-opacity duration-500">
+                    <span class="bg-black/60 backdrop-blur-sm text-white/90 text-xs font-semibold px-4 py-2 rounded-full border border-white/15">
+                        👆 Toca los objetos o desliza la cesta inferior
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             MODAL: RESULTADOS DE PARTIDA
+             ========================================== -->
+        <div id="gameOverModal" class="hidden fixed inset-0 z-40 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div class="bg-[#151a24] border border-amber-400/30 rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl transform transition-all">
+                <div id="newRecordBadge" class="hidden inline-block bg-amber-400 text-slate-950 font-black text-xs px-3 py-1 rounded-full uppercase tracking-wider mb-2 animate-bounce">
+                    🎉 ¡Nuevo Récord Personal!
+                </div>
+                <h2 class="text-2xl font-black text-white mb-1">¡Tiempo Agotado!</h2>
+                <p class="text-xs text-slate-400 mb-4">Tu puntuación se ha actualizado en el Top Diario</p>
+
+                <div class="bg-[#0b0e14] border border-white/10 rounded-2xl p-4 mb-4">
+                    <div class="text-xs text-slate-400 uppercase font-bold">Puntuación Final</div>
+                    <div id="finalScoreDisplay" class="font-mono-num text-4xl font-black text-gradient-gold my-1">0</div>
+                    <div class="flex justify-center gap-4 text-xs text-slate-300 mt-2 pt-2 border-t border-white/10">
+                        <span>Puesto Top: <strong id="finalRankDisplay" class="text-sky-400">#1</strong></span>
+                        <span>Combo Máx: <strong id="finalComboDisplay" class="text-amber-400">x1</strong></span>
+                    </div>
+                </div>
+
+                <div class="flex flex-col gap-2.5">
+                    <button onclick="startGame()" class="btn-play w-full py-3.5 rounded-2xl font-black text-base uppercase cursor-pointer">
+                        🔄 Jugar de Nuevo
+                    </button>
+                    <button onclick="closeGameOverToLobby()" class="w-full py-3 rounded-2xl font-bold text-sm bg-white/10 hover:bg-white/15 text-white transition cursor-pointer">
+                        🏆 Ver Top Diario
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             MODAL: TABLA DE RECOMPENSAS Y REINICIO DEMO
+             ========================================== -->
+        <div id="rewardsModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div class="bg-[#151a24] border border-white/15 rounded-3xl p-5 w-full max-w-sm shadow-2xl">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-lg font-black text-white flex items-center gap-2">🎁 Recompensas Diarias</h3>
+                    <button onclick="closeRewardsModal()" class="w-8 h-8 rounded-full bg-white/10 text-slate-300 flex items-center justify-center">✕</button>
+                </div>
+                <p class="text-xs text-slate-400 mb-4">
+                    Al finalizar el contador diario, los 3 jugadores con mayor puntaje reciben premios directos en su cuenta:
+                </p>
+
+                <div class="flex flex-col gap-2.5 mb-5">
+                    <div class="flex items-center justify-between bg-gradient-to-r from-amber-500/20 to-amber-600/5 border border-amber-400/40 p-3 rounded-2xl">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-2xl">🥇</span>
+                            <div>
+                                <div class="font-bold text-sm text-amber-300">1er Lugar</div>
+                                <div class="text-[11px] text-slate-300">Campeón Diario</div>
+                            </div>
+                        </div>
+                        <span class="font-mono-num font-black text-sm text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-lg">500 Stars + VIP</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-gradient-to-r from-slate-300/15 to-slate-400/5 border border-slate-300/30 p-3 rounded-2xl">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-2xl">🥈</span>
+                            <div>
+                                <div class="font-bold text-sm text-slate-200">2do Lugar</div>
+                                <div class="text-[11px] text-slate-400">Subcampeón</div>
+                            </div>
+                        </div>
+                        <span class="font-mono-num font-black text-sm text-slate-200 bg-white/10 px-2.5 py-1 rounded-lg">250 Stars</span>
+                    </div>
+
+                    <div class="flex items-center justify-between bg-gradient-to-r from-amber-700/20 to-amber-800/5 border border-amber-600/30 p-3 rounded-2xl">
+                        <div class="flex items-center gap-2.5">
+                            <span class="text-2xl">🥉</span>
+                            <div>
+                                <div class="font-bold text-sm text-amber-500">3er Lugar</div>
+                                <div class="text-[11px] text-slate-400">Podio Bronce</div>
+                            </div>
+                        </div>
+                        <span class="font-mono-num font-black text-sm text-amber-500 bg-amber-500/10 px-2.5 py-1 rounded-lg">100 Stars</span>
+                    </div>
+                </div>
+
+                <!-- Herramienta de prueba para reiniciar el Top Diario -->
+                <div class="border-t border-white/10 pt-3 flex items-center justify-between">
+                    <span class="text-[11px] text-slate-400">¿Probar reinicio del día?</span>
+                    <button onclick="resetDailyLeaderboard(true)" class="text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 border border-rose-500/30 px-3 py-1.5 rounded-xl transition">
+                        Reiniciar Top Hoy
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==========================================
+             MODAL: EDITAR ALIAS (PARA NAVEGADOR WEB)
+             ========================================== -->
+        <div id="editNameModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+            <div class="bg-[#151a24] border border-white/15 rounded-3xl p-5 w-full max-w-xs shadow-2xl">
+                <h3 class="text-base font-black text-white mb-1">Tu Alias en el Top</h3>
+                <p class="text-xs text-slate-400 mb-3">Así aparecerás en la tabla de clasificación diaria:</p>
+                <input id="aliasInput" type="text" maxlength="16" placeholder="Ej. CryptoKing" class="w-full bg-[#0b0e14] border border-white/20 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm text-white outline-none mb-4">
+                <div class="flex gap-2">
+                    <button onclick="closeEditNameModal()" class="flex-1 py-2.5 rounded-xl text-xs font-bold bg-white/10 text-slate-300">Cancelar</button>
+                    <button onclick="saveCustomAlias()" class="flex-1 py-2.5 rounded-xl text-xs font-black bg-amber-400 text-slate-950">Guardar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- NOTIFICACIÓN FLOTANTE (TOAST SIN ALERT) -->
+        <div id="toastMessage" class="pointer-events-none fixed top-5 left-1/2 -translate-x-1/2 z-50 opacity-0 transition-all duration-300 bg-slate-900/95 border border-amber-400/50 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2">
+            <span id="toastIcon">✨</span>
+            <span id="toastText">Mensaje</span>
+        </div>
+
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * 1. CONFIGURACIÓN E INTEGRACIÓN CON TELEGRAM WEBAPP SDK
+         * ============================================================================
+         */
+        const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+
+        let currentUser = {
+            id: 'local_player',
+            name: 'Jugador Invitado',
+            username: '',
+            isTelegram: false
+        };
+
+        function initTelegramIntegration() {
+            if (tg) {
+                tg.ready();
+                tg.expand(); // Expande la Mini App a pantalla completa en Telegram
+                try {
+                    tg.setHeaderColor('#0b0e14');
+                    tg.setBackgroundColor('#0b0e14');
+                } catch (e) {}
+
+                const tgUser = tg.initDataUnsafe && tg.initDataUnsafe.user;
+                if (tgUser) {
+                    currentUser.id = 'tg_' + tgUser.id;
+                    const fullName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ');
+                    currentUser.name = fullName || tgUser.username || 'Usuario TG';
+                    currentUser.username = tgUser.username ? '@' + tgUser.username : '';
+                    currentUser.isTelegram = true;
+
+                    document.getElementById('tgStatusBadge').innerHTML = `
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block"></span> Conectado con Telegram
+                    `;
+                    document.getElementById('tgStatusBadge').classList.replace('text-sky-400', 'text-emerald-400');
+                }
+            }
+
+            // Verificar si hay un alias personalizado guardado en sesión
+            const savedAlias = sessionStorage.getItem('sc_custom_alias');
+            if (savedAlias && !currentUser.isTelegram) {
+                currentUser.name = savedAlias;
+            }
+
+            updateUserHeaderUI();
+        }
+
+        function updateUserHeaderUI() {
+            document.getElementById('displayUserName').textContent = currentUser.name;
+            const initial = currentUser.name.trim().charAt(0).toUpperCase() || '⭐';
+            document.getElementById('userAvatar').textContent = initial;
+        }
+
+        /**
+         * ============================================================================
+         * 2. SINTETIZADOR DE SONIDOS (WEB AUDIO API - SIN ARCHIVOS EXTERNOS)
+         * ============================================================================
+         */
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioCtx = new AudioContext();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('soundToggleBtn').textContent = soundEnabled ? '🔊' : '🔇';
+            showToast(soundEnabled ? 'Sonido activado' : 'Sonido silenciado', soundEnabled ? '🔊' : '🔇');
+        }
+
+        function playSound(type, combo = 1) {
+            if (!soundEnabled) return;
+            initAudio();
+
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'coin') {
+                // Sonido agudo tipo moneda con pitch según combo
+                const baseFreq = 580 + Math.min(combo * 45, 450);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(baseFreq, now);
+                osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.4, now + 0.12);
+                gain.gain.setValueAtTime(0.18, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+                osc.start(now);
+                osc.stop(now + 0.14);
+            } else if (type === 'star') {
+                // Acorde brillante para estrella o diamante
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(780, now);
+                osc.frequency.setValueAtTime(1046, now + 0.06);
+                osc.frequency.exponentialRampToValueAtTime(1318, now + 0.18);
+                gain.gain.setValueAtTime(0.22, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (type === 'bomb') {
+                // Explosión grave
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(140, now);
+                osc.frequency.exponentialRampToValueAtTime(35, now + 0.35);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+                osc.start(now);
+                osc.stop(now + 0.36);
+            } else if (type === 'win') {
+                // Fanfarria corta al terminar
+                const notes = [523.25, 659.25, 783.99, 1046.50];
+                notes.forEach((freq, idx) => {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    o.type = 'triangle';
+                    o.connect(g);
+                    g.connect(audioCtx.destination);
+                    o.frequency.setValueAtTime(freq, now + idx * 0.08);
+                    g.gain.setValueAtTime(0.15, now + idx * 0.08);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.25);
+                    o.start(now + idx * 0.08);
+                    o.stop(now + idx * 0.08 + 0.25);
+                });
+            }
+        }
+
+        function triggerHaptic(style = 'light') {
+            if (tg && tg.HapticFeedback) {
+                if (style === 'error') tg.HapticFeedback.notificationOccurred('error');
+                else if (style === 'success') tg.HapticFeedback.notificationOccurred('success');
+                else tg.HapticFeedback.impactOccurred(style);
+            }
+        }
+
+        /**
+         * ============================================================================
+         * 3. GESTIÓN DEL TOP DIARIO (LEADERBOARD) Y PERSISTENCIA DE SESIÓN
+         * ============================================================================
+         */
+        const INITIAL_RIVALS = [
+            { id: 'bot_1', name: 'AlexTON 💎', score: 680, isBot: true },
+            { id: 'bot_2', name: 'Sofia_Star', score: 540, isBot: true },
+            { id: 'bot_3', name: 'CryptoMateo', score: 420, isBot: true },
+            { id: 'bot_4', name: 'Valentina⚡', score: 310, isBot: true },
+            { id: 'bot_5', name: 'DurovFan99', score: 220, isBot: true },
+            { id: 'bot_6', name: 'Luna_Web3', score: 150, isBot: true }
+        ];
+
+        let dailyLeaderboard = [];
+        let personalBest = 0;
+        let rewardClaimedToday = false;
+
+        function getTodayKey() {
+            const now = new Date();
+            return `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}-${now.getUTCDate()}`;
+        }
+
+        function loadDailyData() {
+            const todayKey = getTodayKey();
+            const savedDate = sessionStorage.getItem('sc_date_key');
+
+            if (savedDate !== todayKey) {
+                resetDailyLeaderboard(false);
+            } else {
+                const rawBoard = sessionStorage.getItem('sc_leaderboard');
+                dailyLeaderboard = rawBoard ? JSON.parse(rawBoard) : JSON.parse(JSON.stringify(INITIAL_RIVALS));
+                personalBest = parseInt(sessionStorage.getItem('sc_personal_best') || '0', 10);
+                rewardClaimedToday = sessionStorage.getItem('sc_reward_claimed') === 'true';
+            }
+
+            syncUserInLeaderboard();
+            renderLeaderboard();
+        }
+
+        function resetDailyLeaderboard(notify = true) {
+            const todayKey = getTodayKey();
+            sessionStorage.setItem('sc_date_key', todayKey);
+            // Variar ligeramente los puntajes de rivales al reiniciar para frescura
+            dailyLeaderboard = INITIAL_RIVALS.map(r => ({
+                ...r,
+                score: r.score + Math.floor(Math.random() * 60 - 20)
+            }));
+            personalBest = 0;
+            rewardClaimedToday = false;
+            saveDailyData();
+            syncUserInLeaderboard();
+            renderLeaderboard();
+            if (notify) {
+                closeRewardsModal();
+                showToast('Top Diario reiniciado para un nuevo día', '🔄');
+            }
+        }
+
+        function saveDailyData() {
+            sessionStorage.setItem('sc_leaderboard', JSON.stringify(dailyLeaderboard));
+            sessionStorage.setItem('sc_personal_best', personalBest.toString());
+            sessionStorage.setItem('sc_reward_claimed', rewardClaimedToday.toString());
+        }
+
+        function syncUserInLeaderboard() {
+            // Actualizar nombre o agregar jugador si ya tiene puntos
+            const existingIdx = dailyLeaderboard.findIndex(item => item.id === currentUser.id);
+            if (existingIdx !== -1) {
+                dailyLeaderboard[existingIdx].name = currentUser.name;
+                dailyLeaderboard[existingIdx].score = Math.max(dailyLeaderboard[existingIdx].score, personalBest);
+            } else if (personalBest > 0) {
+                dailyLeaderboard.push({
+                    id: currentUser.id,
+                    name: currentUser.name,
+                    score: personalBest,
+                    isBot: false
+                });
+            }
+
+            // Ordenar descendente por puntuación
+            dailyLeaderboard.sort((a, b) => b.score - a.score);
+            saveDailyData();
+        }
+
+        function renderLeaderboard() {
+            document.getElementById('personalBestDisplay').textContent = personalBest;
+            const listEl = document.getElementById('leaderboardList');
+            listEl.innerHTML = '';
+
+            let userRank = -1;
+
+            dailyLeaderboard.forEach((entry, index) => {
+                const rank = index + 1;
+                const isMe = entry.id === currentUser.id;
+                if (isMe) userRank = rank;
+
+                // Determinar medalla y premio por puesto
+                let rankDisplay = `<span class="font-mono-num text-xs font-bold text-slate-400">#${rank}</span>`;
+                let rewardTag = '';
+                let rowStyle = isMe
+                    ? 'bg-sky-500/15 border-sky-400/50'
+                    : 'bg-[#0b0e14]/60 border-white/5';
+
+                if (rank === 1) {
+                    rankDisplay = `<span class="text-lg">🥇</span>`;
+                    rewardTag = `<span class="text-[10px] font-bold text-amber-300 bg-amber-400/15 px-2 py-0.5 rounded-md">500 ⭐</span>`;
+                    if (!isMe) rowStyle = 'bg-amber-500/10 border-amber-400/25';
+                } else if (rank === 2) {
+                    rankDisplay = `<span class="text-lg">🥈</span>`;
+                    rewardTag = `<span class="text-[10px] font-bold text-slate-200 bg-white/10 px-2 py-0.5 rounded-md">250 ⭐</span>`;
+                } else if (rank === 3) {
+                    rankDisplay = `<span class="text-lg">🥉</span>`;
+                    rewardTag = `<span class="text-[10px] font-bold text-amber-500 bg-amber-600/15 px-2 py-0.5 rounded-md">100 ⭐</span>`;
+                }
+
+                const itemHtml = `
+                    <div class="flex items-center justify-between p-2.5 rounded-2xl border ${rowStyle} transition">
+                        <div class="flex items-center gap-2.5 overflow-hidden">
+                            <div class="w-7 text-center shrink-0">${rankDisplay}</div>
+                            <div class="truncate">
+                                <div class="text-xs font-bold ${isMe ? 'text-sky-300' : 'text-white'} truncate flex items-center gap-1.5">
+                                    <span>${entry.name}</span>
+                                    ${isMe ? '<span class="text-[9px] uppercase bg-sky-400 text-slate-950 font-black px-1.5 py-0.2 rounded">TÚ</span>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                            ${rewardTag}
+                            <span class="font-mono-num text-sm font-black ${rank <= 3 ? 'text-amber-400' : 'text-slate-300'}">${entry.score}</span>
+                        </div>
+                    </div>
+                `;
+                listEl.insertAdjacentHTML('beforeend', itemHtml);
+            });
+
+            // Actualizar banner de estado del usuario
+            const rankBadge = document.getElementById('userRankBadge');
+            const projReward = document.getElementById('userProjectedReward');
+            const claimBtn = document.getElementById('claimRewardBtn');
+
+            if (userRank === -1) {
+                rankBadge.textContent = '#--';
+                projReward.textContent = '¡Juega tu primera partida hoy!';
+                claimBtn.classList.add('hidden');
+            } else {
+                rankBadge.textContent = `#${userRank}`;
+                if (userRank <= 3) {
+                    const prizes = { 1: '500 Stars + VIP', 2: '250 Stars', 3: '100 Stars' };
+                    projReward.textContent = `Premio actual: ${prizes[userRank]}`;
+                    claimBtn.classList.remove('hidden');
+                    claimBtn.textContent = rewardClaimedToday ? 'Reclamado ✓' : 'Reclamar';
+                    claimBtn.disabled = rewardClaimedToday;
+                    if (rewardClaimedToday) {
+                        claimBtn.className = 'text-xs font-bold bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl cursor-default';
+                    }
+                } else {
+                    const ptsNeeded = (dailyLeaderboard[2]?.score || 100) - personalBest + 10;
+                    projReward.textContent = `A ${ptsNeeded} pts del Top 3`;
+                    claimBtn.classList.add('hidden');
+                }
+            }
+
+            return userRank;
+        }
+
+        function claimDailyReward() {
+            if (rewardClaimedToday) return;
+            rewardClaimedToday = true;
+            saveDailyData();
+            renderLeaderboard();
+            playSound('win');
+            triggerHaptic('success');
+            showToast('¡Recompensa diaria registrada en tu perfil!', '🎁');
+        }
+
+        /**
+         * ============================================================================
+         * 4. RELOJ DE CUENTA REGRESIVA PARA REINICIO DIARIO (00:00 UTC)
+         * ============================================================================
+         */
+        function updateDailyCountdown() {
+            const now = new Date();
+            const tomorrowUTC = new Date(Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate() + 1,
+                0, 0, 0
+            ));
+            const diff = Math.max(0, tomorrowUTC - now);
+
+            const hours = Math.floor(diff / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+            const formatted = [
+                String(hours).padStart(2, '0'),
+                String(minutes).padStart(2, '0'),
+                String(seconds).padStart(2, '0')
+            ].join(':');
+
+            document.getElementById('dailyResetTimer').textContent = formatted;
+        }
+
+        /**
+         * ============================================================================
+         * 5. MOTOR DEL MINIJUEGO (30 SEGUNDOS CATCH / TAP RÁPIDO)
+         * ============================================================================
+         */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let gameState = {
+            running: false,
+            score: 0,
+            timeLeft: 30,
+            combo: 0,
+            maxCombo: 1,
+            items: [],
+            particles: [],
+            floatingTexts: [],
+            basket: { x: 0, y: 0, width: 88, height: 22 },
+            lastSpawnTime: 0,
+            lastFrameTime: 0,
+            timerInterval: null
+        };
+
+        const ITEM_TYPES = [
+            { type: 'coin', emoji: '🪙', points: 10, weight: 50, radius: 22, color: '#fbbf24' },
+            { type: 'star', emoji: '⭐', points: 25, weight: 28, radius: 25, color: '#fde047' },
+            { type: 'diamond', emoji: '💎', points: 50, weight: 10, radius: 26, color: '#38bdf8' },
+            { type: 'bomb', emoji: '💣', points: -50, weight: 12, radius: 24, color: '#f43f5e' }
+        ];
+
+        function resizeCanvas() {
+            const wrapper = document.getElementById('canvasWrapper');
+            if (!wrapper) return;
+            const rect = wrapper.getBoundingClientRect();
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+            gameState.basket.y = rect.height - 46;
+            if (gameState.basket.x === 0) {
+                gameState.basket.x = rect.width / 2;
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function startGame() {
+            initAudio();
+            document.getElementById('lobbyScreen').classList.add('hidden');
+            document.getElementById('gameOverModal').classList.add('hidden');
+            document.getElementById('gameScreen').classList.remove('hidden');
+
+            resizeCanvas();
+
+            const rect = document.getElementById('canvasWrapper').getBoundingClientRect();
+            gameState = {
+                running: true,
+                score: 0,
+                timeLeft: 30,
+                combo: 0,
+                maxCombo: 1,
+                items: [],
+                particles: [],
+                floatingTexts: [],
+                basket: { x: rect.width / 2, y: rect.height - 48, width: 92, height: 24 },
+                lastSpawnTime: performance.now(),
+                lastFrameTime: performance.now(),
+                timerInterval: null
+            };
+
+            updateHUD();
+            document.getElementById('touchHint').style.opacity = '1';
+            setTimeout(() => {
+                const hint = document.getElementById('touchHint');
+                if (hint) hint.style.opacity = '0';
+            }, 3000);
+
+            clearInterval(gameState.timerInterval);
+            gameState.timerInterval = setInterval(() => {
+                if (!gameState.running) return;
+                gameState.timeLeft--;
+                updateHUD();
+                if (gameState.timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateHUD() {
+            document.getElementById('hudScore').textContent = gameState.score;
+            const timerEl = document.getElementById('hudTimer');
+            timerEl.textContent = `${gameState.timeLeft}s`;
+            if (gameState.timeLeft <= 5) {
+                timerEl.classList.replace('text-sky-400', 'text-rose-500');
+            } else {
+                timerEl.classList.replace('text-rose-500', 'text-sky-400');
+            }
+
+            const comboBadge = document.getElementById('comboBadge');
+            if (gameState.combo >= 2) {
+                comboBadge.textContent = `COMBO x${gameState.combo}`;
+                comboBadge.style.opacity = '1';
+            } else {
+                comboBadge.style.opacity = '0';
+            }
+        }
+
+        function spawnItem(width) {
+            const totalWeight = ITEM_TYPES.reduce((sum, item) => sum + item.weight, 0);
+            let rand = Math.random() * totalWeight;
+            let chosen = ITEM_TYPES[0];
+
+            for (const item of ITEM_TYPES) {
+                if (rand < item.weight) {
+                    chosen = item;
+                    break;
+                }
+                rand -= item.weight;
+            }
+
+            // Aumenta progresivamente la velocidad conforme pasan los segundos
+            const progress = (30 - gameState.timeLeft) / 30;
+            const speed = (220 + Math.random() * 140) * (1 + progress * 0.65);
+            const margin = 36;
+
+            gameState.items.push({
+                ...chosen,
+                x: margin + Math.random() * (width - margin * 2),
+                y: -30,
+                vy: speed,
+                rotation: (Math.random() - 0.5) * 0.5,
+                vRot: (Math.random() - 0.5) * 3
+            });
+        }
+
+        function createExplosion(x, y, color, count = 14) {
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+                const speed = 70 + Math.random() * 180;
+                gameState.particles.push({
+                    x,
+                    y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 1,
+                    size: 3 + Math.random() * 4,
+                    color
+                });
+            }
+        }
+
+        function addFloatingText(x, y, text, color) {
+            gameState.floatingTexts.push({
+                x,
+                y,
+                text,
+                color,
+                life: 1
+            });
+        }
+
+        function collectItem(item) {
+            if (item.type === 'bomb') {
+                gameState.score = Math.max(0, gameState.score + item.points);
+                gameState.combo = 0;
+                playSound('bomb');
+                triggerHaptic('error');
+                createExplosion(item.x, item.y, '#f43f5e', 22);
+                addFloatingText(item.x, item.y, '-50 💣', '#fb7185');
+
+                // Sacudida de pantalla
+                const wrapper = document.getElementById('canvasWrapper');
+                wrapper.classList.remove('shake-screen');
+                void wrapper.offsetWidth;
+                wrapper.classList.add('shake-screen');
+            } else {
+                gameState.combo++;
+                if (gameState.combo > gameState.maxCombo) {
+                    gameState.maxCombo = gameState.combo;
+                }
+                const multiplier = gameState.combo >= 5 ? 1.5 : 1;
+                const earned = Math.round(item.points * multiplier);
+                gameState.score += earned;
+
+                playSound(item.type === 'coin' ? 'coin' : 'star', gameState.combo);
+                triggerHaptic(item.type === 'diamond' ? 'medium' : 'light');
+                createExplosion(item.x, item.y, item.color, 14);
+                addFloatingText(
+                    item.x,
+                    item.y,
+                    `+${earned}${multiplier > 1 ? ' 🔥' : ''}`,
+                    item.color
+                );
+            }
+            updateHUD();
+        }
+
+        function gameLoop(now) {
+            if (!gameState.running) return;
+
+            const dt = Math.min((now - gameState.lastFrameTime) / 1000, 0.05);
+            gameState.lastFrameTime = now;
+
+            const rect = document.getElementById('canvasWrapper').getBoundingClientRect();
+            const width = rect.width;
+            const height = rect.height;
+
+            // Frecuencia de aparición dinámica
+            const progress = (30 - gameState.timeLeft) / 30;
+            const spawnInterval = Math.max(240, 520 - progress * 240);
+            if (now - gameState.lastSpawnTime > spawnInterval) {
+                spawnItem(width);
+                gameState.lastSpawnTime = now;
+            }
+
+            // Limpiar lienzo
+            ctx.clearRect(0, 0, width, height);
+
+            // Dibujar cuadrícula sutil de fondo estilo TON
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+            ctx.lineWidth = 1;
+            const gridSize = 48;
+            for (let x = 0; x < width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
+
+            // Dibujar Cesta / Colector Neón inferior
+            const b = gameState.basket;
+            const bLeft = b.x - b.width / 2;
+            const bTop = b.y - b.height / 2;
+
+            const grad = ctx.createLinearGradient(bLeft, bTop, bLeft + b.width, bTop);
+            grad.addColorStop(0, '#0098ea');
+            grad.addColorStop(0.5, '#38bdf8');
+            grad.addColorStop(1, '#fbbf24');
+
+            ctx.save();
+            ctx.shadowColor = 'rgba(0, 152, 234, 0.6)';
+            ctx.shadowBlur = 16;
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.roundRect(bLeft, bTop, b.width, b.height, 12);
+            ctx.fill();
+            ctx.restore();
+
+            // Actualizar y dibujar objetos que caen
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            for (let i = gameState.items.length - 1; i >= 0; i--) {
+                const item = gameState.items[i];
+                item.y += item.vy * dt;
+                item.rotation += item.vRot * dt;
+
+                // Colisión con la cesta inferior
+                const hitBasketX = Math.abs(item.x - b.x) <= (b.width / 2 + item.radius * 0.65);
+                const hitBasketY = Math.abs(item.y - b.y) <= (b.height / 2 + item.radius * 0.65);
+
+                if (hitBasketX && hitBasketY) {
+                    collectItem(item);
+                    gameState.items.splice(i, 1);
+                    continue;
+                }
+
+                // Eliminar si sale por abajo
+                if (item.y > height + 40) {
+                    if (item.type !== 'bomb') {
+                        gameState.combo = 0;
+                        updateHUD();
+                    }
+                    gameState.items.splice(i, 1);
+                    continue;
+                }
+
+                // Dibujar aura y emoji
+                ctx.save();
+                ctx.translate(item.x, item.y);
+                ctx.rotate(item.rotation);
+
+                ctx.beginPath();
+                ctx.arc(0, 0, item.radius, 0, Math.PI * 2);
+                ctx.fillStyle = item.type === 'bomb'
+                    ? 'rgba(244, 63, 94, 0.16)'
+                    : 'rgba(251, 191, 36, 0.12)';
+                ctx.fill();
+
+                ctx.font = '32px sans-serif';
+                ctx.fillText(item.emoji, 0, 2);
+                ctx.restore();
+            }
+
+            // Actualizar y dibujar partículas
+            for (let i = gameState.particles.length - 1; i >= 0; i--) {
+                const p = gameState.particles[i];
+                p.x += p.vx * dt;
+                p.y += p.vy * dt;
+                p.life -= dt * 2.4;
+
+                if (p.life <= 0) {
+                    gameState.particles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.globalAlpha = Math.max(0, p.life);
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // Dibujar textos flotantes (+10, +50, etc.)
+            for (let i = gameState.floatingTexts.length - 1; i >= 0; i--) {
+                const ft = gameState.floatingTexts[i];
+                ft.y -= 55 * dt;
+                ft.life -= dt * 1.6;
+
+                if (ft.life <= 0) {
+                    gameState.floatingTexts.splice(i, 1);
+                    continue;
+                }
+
+                ctx.globalAlpha = Math.max(0, ft.life);
+                ctx.font = '900 18px Outfit, sans-serif';
+                ctx.fillStyle = ft.color;
+                ctx.fillText(ft.text, ft.x, ft.y);
+            }
+            ctx.globalAlpha = 1;
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            gameState.running = false;
+            clearInterval(gameState.timerInterval);
+            playSound('win');
+            triggerHaptic('success');
+
+            const isNewRecord = gameState.score > personalBest;
+            if (isNewRecord) {
+                personalBest = gameState.score;
+            }
+
+            syncUserInLeaderboard();
+            const currentRank = renderLeaderboard();
+
+            document.getElementById('finalScoreDisplay').textContent = gameState.score;
+            document.getElementById('finalRankDisplay').textContent = currentRank > 0 ? `#${currentRank}` : '#--';
+            document.getElementById('finalComboDisplay').textContent = `x${gameState.maxCombo}`;
+
+            const recordBadge = document.getElementById('newRecordBadge');
+            if (isNewRecord && gameState.score > 0) {
+                recordBadge.classList.remove('hidden');
+            } else {
+                recordBadge.classList.add('hidden');
+            }
+
+            document.getElementById('gameOverModal').classList.remove('hidden');
+        }
+
+        function closeGameOverToLobby() {
+            document.getElementById('gameOverModal').classList.add('hidden');
+            document.getElementById('gameScreen').classList.add('hidden');
+            document.getElementById('lobbyScreen').classList.remove('hidden');
+        }
+
+        /**
+         * ============================================================================
+         * 6. CONTROLES HÍBRIDOS: TOCAR OBJETOS DIRECTAMENTE O DESLIZAR LA CESTA
+         * ============================================================================
+         */
+        function handlePointerAction(clientX, clientY, isTap = false) {
+            if (!gameState.running) return;
+            const rect = canvas.getBoundingClientRect();
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            // Mover la cesta horizontalmente
+            const halfW = gameState.basket.width / 2;
+            gameState.basket.x = Math.max(halfW, Math.min(rect.width - halfW, x));
+
+            // Si hace toque/clic directo sobre un objeto que cae, también lo atrapa al instante
+            if (isTap) {
+                for (let i = gameState.items.length - 1; i >= 0; i--) {
+                    const item = gameState.items[i];
+                    const dist = Math.hypot(item.x - x, item.y - y);
+                    if (dist <= item.radius + 24) {
+                        collectItem(item);
+                        gameState.items.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+        }
+
+        canvas.addEventListener('pointerdown', (e) => {
+            handlePointerAction(e.clientX, e.clientY, true);
+        });
+
+        canvas.addEventListener('pointermove', (e) => {
+            if (e.buttons > 0 || e.pointerType === 'touch') {
+                handlePointerAction(e.clientX, e.clientY, false);
+            }
+        });
+
+        /**
+         * ============================================================================
+         * 7. MODALES Y UTILIDADES DE INTERFAZ
+         * ============================================================================
+         */
+        function openRewardsModal() {
+            document.getElementById('rewardsModal').classList.remove('hidden');
+        }
+
+        function closeRewardsModal() {
+            document.getElementById('rewardsModal').classList.add('hidden');
+        }
+
+        function openEditNameModal() {
+            document.getElementById('aliasInput').value = currentUser.name;
+            document.getElementById('editNameModal').classList.remove('hidden');
+        }
+
+        function closeEditNameModal() {
+            document.getElementById('editNameModal').classList.add('hidden');
+        }
+
+        function saveCustomAlias() {
+            const val = document.getElementById('aliasInput').value.trim();
+            if (val.length >= 2) {
+                currentUser.name = val;
+                sessionStorage.setItem('sc_custom_alias', val);
+                updateUserHeaderUI();
+                syncUserInLeaderboard();
+                renderLeaderboard();
+                closeEditNameModal();
+                showToast('Alias actualizado en el Top Diario', '✏️');
+            }
+        }
+
+        let toastTimeout = null;
+        function showToast(text, icon = '✨') {
+            const toast = document.getElementById('toastMessage');
+            document.getElementById('toastText').textContent = text;
+            document.getElementById('toastIcon').textContent = icon;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, 0)';
+
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, -8px)';
+            }, 2500);
+        }
+
+        // Inicialización al cargar la página
+        window.onload = function () {
+            initTelegramIntegration();
+            loadDailyData();
+            updateDailyCountdown();
+            setInterval(updateDailyCountdown, 1000);
+        };
+    </script>
+</body>
+</html>
